@@ -2,7 +2,7 @@ import { Router } from 'express'
 import HttpStatus from 'http-status-codes'
 import { roomsDB, usersDB } from '../../../db'
 import { getItem } from '../../../db/helpers'
-import { checkPassword, isFull } from '../helpers'
+import { checkPassword, checkRoomUser, isFull } from '../helpers'
 import { sendError } from '../../../utils/errorHandler'
 import { map, includes } from 'lodash'
 
@@ -49,6 +49,26 @@ users.get('/', async (req, res) => {
       filter: (user) => includes(ids, user.userId),
     })
     .then((userList) => res.status(HttpStatus.OK).json(userList))
+    .catch((error) => sendError(res, error))
+})
+
+users.delete('/:userId', async (req, res) => {
+  const { roomId, userId } = req.params
+  const { password } = req.headers
+
+  const room = await getItem(roomsDB, roomId, res)
+  if (!room) return
+
+  if (!checkPassword(room, password, res)) return
+
+  if (!checkRoomUser(room, userId, res)) return
+
+  usersDB
+    .delete(userId)
+    .then((user) => {
+      delete room.users[user]
+      res.status(HttpStatus.OK).json(user)
+    })
     .catch((error) => sendError(res, error))
 })
 
