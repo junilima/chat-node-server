@@ -2,7 +2,7 @@ import { Router } from 'express'
 import HttpStatus from 'http-status-codes'
 import { roomsDB, usersDB } from '../../../db'
 import { getItem } from '../../../db/helpers'
-import { checkPassword, isFull } from '../helpers'
+import { checkPassword, checkRoomUser, isFull } from '../helpers'
 import { sendError } from '../../../utils/errorHandler'
 import { map, includes } from 'lodash'
 
@@ -26,6 +26,38 @@ users.post('/', async (req, res) => {
       room.users = room.users || []
       room.users.push(user)
       res.status(200).json(user)
+    })
+    .catch((error) => sendError(res, error))
+})
+
+users.put('/:userId', async (req, res) => {
+  const { roomId, userId } = req.params
+  const { userId: uId, userName } = req.body
+  const { password } = req.headers
+
+  if (userId !== uId || !userName)
+    return res
+      .status(HttpStatus.BAD_REQUEST)
+      .json({ error: { message: 'Params mismatch' } })
+
+  const room = await getItem(roomsDB, roomId, res)
+  if (!room) return
+
+  if (!checkPassword(room, password, res)) return
+
+  if (!checkRoomUser(room, userId, res)) return
+
+  let user = await getItem(usersDB, userId, res)
+
+  if (!user) return
+
+  usersDB
+    .update({ userName, userId })
+    .then((newUser) => {
+      delete room.users[user]
+      user = { ...user, ...newUser }
+      room.users.push(user)
+      res.status(200).json(newUser)
     })
     .catch((error) => sendError(res, error))
 })
